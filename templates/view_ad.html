@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2>{{ ad.title }}</h2>
+    <p>{{ ad.description }}</p>
+
+    {% if ad.image %}
+    <img src="{{ url_for('static', filename='uploads/' ~ ad.image) }}" style="max-width:400px;">
+    {% endif %}
+
+    <hr>
+
+    <!-- Seller info always visible -->
+    <h3>Seller Info</h3>
+    <p><strong>Posted by:</strong> {{ ad.username }}</p>
+    {% if ad.about %}
+    <p><strong>About Seller:</strong> {{ ad.about }}</p>
+    {% endif %}
+    <p><strong>Average Rating:</strong> {{ ad.avg_rating }}</p>
+
+    <!-- Show reviews -->
+    <h3>User Reviews</h3>
+    {% if reviews %}
+    <ul>
+        {% for r in reviews %}
+        <li>
+            <strong>{{ r.reviewer }}</strong> ({{ r.rating }}/5): {{ r.review }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No reviews yet.</p>
+    {% endif %}
+
+    <hr>
+
+    <!-- Actions only for logged-in users -->
+    {% if session.user_id %}
+    <a href="{{ url_for('message', ad_id=ad.id) }}"><button>Inquire</button></a>
+    <a href="{{ url_for('rate_seller', seller_id=ad.user_id, ad_id=ad.id) }}"><button>Rate Seller</button></a>
+    {% else %}
+    <p><a href="{{ url_for('login') }}">Login</a> to inquire or rate this seller.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>My Chats</h2>
+
+{% if chats %}
+<ul>
+    {% for chat in chats %}
+    <li>
+        <strong>{{ chat.ad_title }}</strong> — talking with {{ chat.other_user }}
+        <a href="{{ url_for('messages', ad_id=chat.ad_id) }}">View Conversation</a>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No active chats yet.</p>
+{% endif %}
+{% endblock %}
+

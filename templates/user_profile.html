@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2>{{ user.username }}</h2>
+    <p><strong>About:</strong> {{ user.about or 'No bio available.' }}</p>
+    <p><strong>Rating:</strong> {{ user.avg_rating }}</p>
+
+    {% if session.user_id %}
+    <a href="{{ url_for('message', ad_id=0) }}?contact_user={{ user.username }}">
+        <button>Contact User</button>
+    </a>
+    {% endif %}
+
+    <h3>Reviews</h3>
+    {% if reviews %}
+    {% for review in reviews %}
+    <div class="review-box">
+        <p><strong>{{ review.reviewer }}</strong> rated: {{ review.rating }}/5</p>
+        <p>{{ review.review }}</p>
+        <hr>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p>No reviews yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

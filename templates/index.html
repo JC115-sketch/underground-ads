@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Browse Ads</h2>
+
+<form method="get" action="/">
+    <input type="text" name="q" placeholder="Search..." value="{{ query }}">
+    <button type="submit">Search</button>
+</form>
+
+<div class="container">
+    <a href="{{ url_for('create_ad') }}">Create New Ad</a>
+
+    <div class="listings">
+        {% for ad in ads %}
+        <div class="listing">
+            <h3><a href="{{ url_for('view_ad', ad_id=ad.id) }}">{{ ad.title }}</a></h3>
+            <p>{{ ad.description }}</p>
+            <p>
+                <strong>Posted by:</strong>
+                <a href="{{ url_for('view_user', user_id=ad.user_id) }}" class="user-link">{{ ad.username }}</a>
+            </p>
+            {% if ad.image %}
+            <img src="{{ url_for('static', filename='uploads/' ~ ad.image) }}" width="100">
+            {% endif %}
+            <a href="{{ url_for('message', ad_id=ad.id) }}"><button>Inquire</button></a>
+        </div>
+        {% else %}
+        <p>No ads found.</p>
+        {% endfor %}
+    </div>
+
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="/?q={{ query }}&page={{ page - 1 }}">Previous</a>
+        {% endif %}
+        {% if page < total_pages %}
+        <a href="/?q={{ query }}&page={{ page + 1 }}">Next</a>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2>Messages for "{{ ad.title }}"</h2>
+
+    <div class="messages">
+        {% for msg in messages %}
+        <p><strong>{{ msg.sender_name }}:</strong> {{ msg.content }}</p>
+        {% else %}
+        <p>No messages yet.</p>
+        {% endfor %}
+    </div>
+
+    <form method="POST">
+        <textarea name="message" rows="3" placeholder="Type your message..."></textarea><br>
+        <button type="submit">Send</button>
+    </form>
+</div>
+{% endblock %}
+

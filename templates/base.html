@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title if title else "Underground Ads" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- Dragon banner centered at the top -->
+    <div class="dragon-header">
+        <img src="{{ url_for('static', filename='images/ua_logo_gd.png') }}" alt="Dragon" class="dragon-banner">
+    </div>
+
+    <header class="site-header">
+        <!-- Left side: logo -->
+        <div class="logo-area">
+            <a href="{{ url_for('home') }}">
+                <img src="{{ url_for('static', filename='images/ua_logo.png') }}" class="logo" alt="Underground Ads Logo">
+            </a>
+        </div>
+
+        <!-- Center: site title -->
+        <div class="banner-text">
+            UNDERGROUND ADS
+            <span class="beta">BETA</span>
+        </div>
+    </header>
+
+    <!-- Navigation bar -->
+    <nav class="nav-area">
+        <a href="{{ url_for('home') }}">Home</a> |
+        <a href="{{ url_for('about') }}">About</a> |
+        {% if session.username %}
+        <span>Welcome, {{ session.username }}</span> |
+        <a href="{{ url_for('profile') }}">My Profile</a> |
+        <a href="{{ url_for('logout') }}">Logout</a>
+        {% else %}
+        <a href="{{ url_for('register') }}">Register</a> |
+        <a href="{{ url_for('login') }}">Login</a>
+        {% endif %}
+    </nav>
+
+    <hr>
+
+    <!-- Main page content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <hr>
+        <p>The Underground Ad Co.</p>
+    </footer>
+</body>
+</html>
+
+
+
+

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Edit Ad</h2>
+<form method="POST" enctype="multipart/form-data">
+    <label>Title:</label><br>
+    <input type="text" name="title" value="{{ ad.title }}"><br><br>
+
+    <label>Description:</label><br>
+    <textarea name="description">{{ ad.description }}</textarea><br><br>
+
+    {% if ad.image %}
+    <p>Current Image:</p>
+    <img src="{{ url_for('static', filename='uploads/' ~ ad.image) }}" width="200"><br>
+    <label><input type="checkbox" name="remove_image"> Remove current image</label><br><br>
+    {% endif %}
+
+    <label>Upload new image (optional):</label>
+    <input type="file" name="image"><br><br>
+
+    <button type="submit">Save Changes</button>
+</form>
+{% endblock %}
+

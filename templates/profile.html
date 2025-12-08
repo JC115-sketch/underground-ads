@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>My Profile</h2>
+
+{% if ads %}
+<ul>
+    {% for ad in ads %}
+    <li>
+        <h3>{{ ad.title }}</h3>
+        <p>{{ ad.description }}</p>
+        {% if ad.image %}
+        <img src="{{ url_for('static', filename='uploads/' ~ ad.image) }}" width="100">
+        {% endif %}
+        <form action="{{ url_for('delete_ad', ad_id=ad.id) }}" method="POST" style="display:inline;">
+            <button type="submit">Delete</button>
+        </form>
+        <a href="{{ url_for('edit_ad', ad_id=ad.id) }}">Edit</a>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>You have no ads posted.</p>
+{% endif %}
+<div class="about-section">
+    <h3>About Me</h3>
+    <p>{{ about if about else "No description added yet." }}</p>
+    <a href="{{ url_for('edit_profile') }}"><button>Edit About</button></a>
+</div>
+{% endblock %}
+

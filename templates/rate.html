@@ -1,0 +1,15 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<h2>Rate This Seller</h2>
+
+<form method="post">
+    <label for="rating">Stars (1-5):</label>
+    <input type="number" name="rating" min="1" max="5" required><br><br>
+
+    <label for="review">Review (optional, 50 chars max):</label><br>
+    <textarea name="review" maxlength="50" rows="3" cols="40"></textarea><br><br>
+
+    <button type="submit">Submit</button>
+</form>
+{% endblock %}
+

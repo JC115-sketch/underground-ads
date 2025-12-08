@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Admin Dashboard</h2>
+
+<h3>Users</h3>
+<table border="1" cellspacing="0" cellpadding="5">
+    <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Admin</th>
+        <th>About</th>
+        <th>Avg Rating</th>
+        <th>Reviews</th>
+        <th>Actions</th>
+    </tr>
+
+    {% for u in users %}
+    <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.username }}</td>
+        <td>{{ 'Yes' if u.is_admin else 'No' }}</td>
+        <td>{{ u.about if u.about else '—' }}</td>
+        <td>{{ u.avg_rating }}</td>
+        <td>{{ u.review_count }}</td>
+        <td>
+            <form action="{{ url_for('delete_user_reviews', user_id=u.id) }}" method="post" style="display:inline;">
+                <button type="submit" onclick="return confirm('Delete all reviews for {{ u.username }}?')">
+                    Delete Reviews
+                </button>
+            </form>
+            <form action="{{ url_for('delete_user_about', user_id=u.id) }}" method="post" style="display:inline;">
+                <button type="submit" onclick="return confirm('Clear About section for {{ u.username }}?')">
+                    Clear About
+                </button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h3>All Ads</h3>
+<table border="1">
+    <tr><th>ID</th><th>Title</th><th>Posted By</th><th>Delete</th></tr>
+    {% for ad in ads %}
+    <tr>
+        <td>{{ ad.id }}</td>
+        <td>{{ ad.title }}</td>
+        <td>{{ ad.username }}</td>
+        <td>
+            <form action="{{ url_for('delete_ad_m', ad_id=ad.id) }}" method="post" style="display:inline;">
+                <button type="submit">Delete</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}
+
