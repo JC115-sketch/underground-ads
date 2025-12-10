@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Edit Profile</h2>
-<form method="post">
-    <textarea name="about" rows="5" cols="50" placeholder="Write something about yourself...">{{ about }}</textarea><br>
-    <button type="submit">Save</button>
-</form>
+<div class="container">
+    <h2>Edit Profile</h2>
+    <form method="post">
+        <label for="about">About Me:</label><br>
+        <textarea name="about" rows="4" cols="60">{{ about }}</textarea><br><br>
+        <button type="submit">Save</button>
+    </form>
+</div>
 {% endblock %}
+
 

@@ -12,22 +12,22 @@
     <a href="{{ url_for('create_ad') }}">Create New Ad</a>
 
     <div class="listings">
-        {% for ad in ads %}
-        <div class="listing">
-            <h3><a href="{{ url_for('view_ad', ad_id=ad.id) }}">{{ ad.title }}</a></h3>
-            <p>{{ ad.description }}</p>
-            <p>
-                <strong>Posted by:</strong>
-                <a href="{{ url_for('view_user', user_id=ad.user_id) }}" class="user-link">{{ ad.username }}</a>
-            </p>
-            {% if ad.image %}
-            <img src="{{ url_for('static', filename='uploads/' ~ ad.image) }}" width="100">
-            {% endif %}
-            <a href="{{ url_for('message', ad_id=ad.id) }}"><button>Inquire</button></a>
-        </div>
-        {% else %}
-        <p>No ads found.</p>
-        {% endfor %}
+    {% for ad in ads %}
+    <div class="listing">
+        <h3><a href="{{ url_for('view_ad', ad_id=ad['id']) }}">{{ ad['title'] }}</a></h3>
+        <p>{{ ad['description'] }}</p>
+        <p>
+            <strong>Posted by:</strong>
+            <a href="{{ url_for('view_user', user_id=ad['user_id']) }}" class="user-link">{{ ad['username'] }}</a>
+        </p>
+        {% if ad['image'] %}
+        <img src="{{ url_for('static', filename='uploads/' + ad['image']) }}" width="100">
+        {% endif %}
+        <a href="{{ url_for('message', ad_id=ad['id']) }}"><button>Inquire</button></a>
+    </div>
+    {% else %}
+    <p>No ads found.</p>
+    {% endfor %}
     </div>
 
     <div class="pagination">

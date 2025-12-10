@@ -19,7 +19,7 @@
         <td>{{ u.id }}</td>
         <td>{{ u.username }}</td>
         <td>{{ 'Yes' if u.is_admin else 'No' }}</td>
-        <td>{{ u.about if u.about else '—' }}</td>
+        <td>{{ u.about if u.about else '' }}</td>
         <td>{{ u.avg_rating }}</td>
         <td>{{ u.review_count }}</td>
         <td>

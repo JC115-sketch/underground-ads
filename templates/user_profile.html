@@ -6,9 +6,7 @@
     <p><strong>Rating:</strong> {{ user.avg_rating }}</p>
 
     {% if session.user_id %}
-    <a href="{{ url_for('message', ad_id=0) }}?contact_user={{ user.username }}">
-        <button>Contact User</button>
-    </a>
+    <a href="{{ url_for('message', user_id=user['id']) }}" class="btn">Contact User</a>
     {% endif %}
 
     <h3>Reviews</h3>

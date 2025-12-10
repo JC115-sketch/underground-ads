@@ -79,7 +79,7 @@ def profile():
     about = cur.fetchone()["about"]
     conn.close()
 
-    return render_template("profile.html", ads=user_ads)
+    return render_template("profile.html", ads=user_ads, about=about)
 
 def admin_required(f):
     @wraps(f)
@@ -284,16 +284,16 @@ def edit_profile():
 
     if request.method == "POST":
         about = request.form.get("about")
-        cur.execute("UPDATE users SET about = ? WHERE id = ?", (session["user_id"]))
+        cur.execute("UPDATE users SET about = ? WHERE id = ?", (about, session["user_id"]))
         conn.commit()
         conn.close()
         return redirect(url_for("profile"))
 
-    cur.execute("SELECT about FROM users WHERE id = ?", (session["user_id"]))
+    cur.execute("SELECT about FROM users WHERE id = ?", (session["user_id"],))
     user = cur.fetchone()
     conn.close()
 
-    return render_template("edit_profile.html", about=user["about"])
+    return render_template("edit_profile.html", about=user["about"] if user else "")
 
 @app.route("/ad/<int:ad_id>")
 def view_ad(ad_id):
@@ -329,7 +329,7 @@ def view_user(user_id):
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT username, about,
+        SELECT users.id, users.username, users.about,
                IFNULL(ROUND(AVG(r.rating), 1), 'No ratings') AS avg_rating
         FROM users
         LEFT JOIN ratings r ON users.id = r.seller_id
@@ -355,35 +355,100 @@ def view_user(user_id):
 
     return render_template("user_profile.html", user=user, reviews=reviews)
 
+
 @app.route("/message/<int:ad_id>", methods=["GET", "POST"])
-def message(ad_id):
+@app.route("/message", methods=["GET", "POST"])
+def message(ad_id=None):
     if "user_id" not in session:
         return redirect(url_for("login"))
 
     conn = get_db()
     cur = conn.cursor()
 
-    # retrieve ad and owner info
-    cur.execute("SELECT ads.*, users.username FROM ads JOIN users ON ads.user_id = users.id WHERE ads.id = ?", (ad_id,))
-    ad = cur.fetchone() # chooses next row available from result set
+    ad = None
+    recipient_id = None
+    ad_title = "Direct Message"
+
+    # case 1 - message from ad listing
+    if ad_id is not None:
+        cur.execute("SELECT ads.*, users.username FROM ads JOIN users ON ads.user_id = users.id WHERE ads.id = ?", (ad_id,))
+        ad = cur.fetchone() # chooses next row available from result set
+        if ad:
+            recipient_id = ad["user_id"] # author
+            ad_title = ad["title"]
+
+    # case 2 - message from user profile
+    user_id = request.args.get("user_id")
+    if user_id and not recipient_id:
+        cur.execute("SELECT id, username FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        if user:
+            recipient_id = user["id"]
+            ad_title = f"Chat with {user['username']}"
 
     if request.method == "POST":
         content = request.form.get("message")
-        cur.execute(""" INSERT INTO messages (ad_id, sender_id, recipient_id, content) VALUES (?, ?, ?, ?)""", (ad_id, session["user_id"], ad["user_id"], content))
+        if recipient_id is None:
+            conn.close()
+            return "Error: recipient not found", 400
+
+        if ad_id is None:
+            ad_id = 0
+
+        cur.execute(""" INSERT INTO messages (ad_id, sender_id, recipient_id, content) VALUES (?, ?, ?, ?)""", (ad_id, session["user_id"], recipient_id, content))
         conn.commit()
 
-    # fetch conversation
-    cur.execute(""" SELECT m.*, u.username AS sender_name
-    FROM messages m
-    JOIN users u ON m.sender_id = u.id
-    WHERE m.ad_id = ?
-    ORDER BY m.created_at ASC
-    """, (ad_id,))
-    messages = cur.fetchall()
+    if recipient_id is not None:
+        cur.execute("""
+            SELECT m.*, u.username AS sender_name
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE (m.sender_id = ? AND m.recipient_id = ?)
+               OR (m.sender_id = ? AND m.recipient_id = ?)
+            ORDER BY m.created_at ASC
+        """, (session["user_id"], recipient_id, recipient_id, session["user_id"]))
+        messages = cur.fetchall()
+    else:
+        messages = []
 
     conn.close()
+    return render_template("messages.html", ad={"title": ad_title}, messages=messages)
 
-    return render_template("messages.html", ad=ad, messages=messages)
+@app.route("/contact_user/<int:user_id>", methods=["GET", "POST"])
+def contact_user(user_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    # prevent messaging yourself
+    if user_id == session["user_id"]:
+        return redirect(url_for("profile"))
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # recipient info
+    cur.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+    recipient = cur.fetchone()
+    if not recipient:
+        conn.close()
+        return "User not found", 404
+
+    if request.method == "POST":
+        content = request.form.get("message")
+        cur.execute("""INSERT INTO messages (ad_id, sender_id, recipient_id, content) VALUES (NULL, ?, ?, ?)""", (session["user_id"], user_id, content),)
+        conn.commit()
+
+    # retrieve message history
+    cur.execute("""SELECT m.*, u.username AS sender_name
+    FROM messages m
+    JOIN users u ON m.sender_id = u.id
+    WHERE (m.sender_id = ? AND m.recipient_id = ?)
+    OR (m.sender_id = ? AND m.recipient_id = ?)
+    ORDER BY m.created_at ASC""", (session["user_id"], user_id, user_id, session["user_id"]),)
+    messages = cur.fetchall()
+    conn.close()
+
+    return render_template("messages.html", ad=None, messages=messages, recipient=recipient)
 
 @app.route('/create_ad', methods=['GET', 'POST'])
 def create_ad():
@@ -420,6 +485,14 @@ def rate_seller(seller_id):
     if "user_id" not in session:
         return redirect(url_for("login"))
 
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT username FROM users WHERE id = ?", (seller_id,))
+    seller = cur.fetchone()
+    if not seller:
+        conn.close()
+        return "User not found", 404
+
     if request.method == "POST":
         rating = int(request.form.get("rating"))
         review = request.form.get("review")[:50]
@@ -431,9 +504,13 @@ def rate_seller(seller_id):
         conn.close()
 
         ad_id = request.args.get("ad_id")
-        return redirect(url_for("view_ad", ad_id=ad_id))
+        if ad_id:
+            return redirect(url_for("view_ad", ad_id=ad_id))
+        else:
+            return redirect(url_for("view_user", user_id=seller_id))
 
-    return render_template("rate.html", seller_id=seller_id)
+    conn.close()
+    return render_template("rate.html", seller_id=seller_id, seller=seller)
 
 if __name__=="__main__":
     init_db()

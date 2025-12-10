@@ -40,7 +40,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ad_id INTEGER NOT NULL,
+            ad_id INTEGER,
             sender_id INTEGER NOT NULL,
             recipient_id INTEGER NOT NULL,
             content TEXT NOT NULL,
