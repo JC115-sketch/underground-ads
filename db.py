@@ -33,6 +33,8 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            pgp_public_key TEXT,
+            pgp_private_key TEXT
         )
     """)
 

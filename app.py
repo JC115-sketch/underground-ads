@@ -1,5 +1,6 @@
 import os
 from db import init_db, get_db
+from pgp_utils import decrypt_message, encrypt_message, generate_keypair
 from flask import Flask, redirect, render_template, request, url_for, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -414,6 +415,53 @@ def message(ad_id=None):
     conn.close()
     return render_template("messages.html", ad={"title": ad_title}, messages=messages)
 
+@app.route("/secure_message/<int:recipient_id>", methods=["GET", "POST"])
+def secure_message(recipient_id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # fetch usn and public key
+    cur.execute("SELECT username, pgp_public_key FROM users WHERE id=?", (recipient_id,))
+    recipient = cur.fetchone()
+    if not recipient or not recipient["pgp_public_key"]:
+        conn.close()
+        return "Recipient not found or no PGP key available", 404
+
+    # fetch sender's private key
+    cur.execute("SELECT pgp_private_key FROM users WHERE id=?", (session["user_id"],))
+    user = cur.fetchone()
+    if not user or not user["pgp_private_key"]:
+        conn.close()
+        return "You must generate your PGP key first", 400
+
+    if request.method == "POST":
+        content = request.form.get("message")
+        encrypted_content = encrypt_message(recipient["pgp_public_key"], content)
+
+        cur.execute("""INSERT INTO messages (ad_id, sender_id, recipient_id, content, is_encrypted) VALUES (NULL, ?, ?, ?, 1)""", (session["user_id"], recipient_id, encrypted_content))
+        conn.commit()
+
+    # retrieve encrypted message history
+    cur.execute("""SELECT m.*, u.username AS sender_name
+    FROM messages m
+    JOIN users u ON m.sender_id = u.id
+    WHERE ((m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?))
+        AND m.is_encrypted = 1
+    ORDER BY m.created_at ASC""", (session["user_id"], recipient_id, recipient_id, session["user_id"]))
+    messages = cur.fetchall()
+
+    # decrypt for display
+    for m in messages:
+        try:
+            m["content"] = decrypt_message(user["pgp_private_key"], m["content"])
+        except Exception as e:
+            m["content"] = f"[Decryption error: {e}]"
+
+    return render_template("messages.html", messages=messages, recipient=recipient, ad={"title": "Secure Chat"})
+
 @app.route("/contact_user/<int:user_id>", methods=["GET", "POST"])
 def contact_user(user_id):
     if "user_id" not in session:
@@ -511,6 +559,20 @@ def rate_seller(seller_id):
 
     conn.close()
     return render_template("rate.html", seller_id=seller_id, seller=seller)
+
+@app.route("/generate_pgp")
+def generate_pgp():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    key = generate_keypair()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET pgp_public_key=?, pgp_private_key=? WHERE id=?", (str(key.pubkey), str(key), session["user_id"]))
+    conn.commit()
+    conn.close()
+
+    return "PGP key generated successfully"
 
 if __name__=="__main__":
     init_db()

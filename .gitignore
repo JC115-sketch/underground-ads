@@ -1,0 +1,9 @@
+# Ignore Visual Studio cache files and local settings
+.vs/
+*.vsidx
+*.user
+*.db
+*.pdb
+bin/
+obj/
+

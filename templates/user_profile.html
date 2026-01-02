@@ -7,6 +7,7 @@
 
     {% if session.user_id %}
     <a href="{{ url_for('message', user_id=user['id']) }}" class="btn">Contact User</a>
+    <a href="{{ url_for('secure_message', recipient_id=user['id']) }}" class="btn">Secure Chat</a>
     {% endif %}
 
     <h3>Reviews</h3>
