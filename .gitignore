@@ -1,9 +1,9 @@
 # Ignore Visual Studio cache files and local settings
 .vs/
-*.vsidx
-*.user
-*.db
-*.pdb
-bin/
-obj/
+venv/
+__pycache__/
+uadb.db
+*.sqlite3
+*.pyc
+
 

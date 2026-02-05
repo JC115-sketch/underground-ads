@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2>Account Settings</h2>
+
+    <h3>PGP Keys</h3>
+
+    {% if pubkey %}
+    <p><strong>Public key:</strong></p>
+    <textarea readonly rows="10" style="width:100%;">{{ pubkey }}</textarea>
+    <p><a href="{{ url_for('download_public_key', which='pub') }}">Download public key (.asc)</a></p>
+    <a href="{{ url_for('download_encrypted_private_key') }}" class="btn">Download Encrypted Private Key (.asc)</a>
+    {% else %}
+    <p>No public key generated yet.</p>
+    {% endif %}
+
+    {% if privkey %}
+    <p><strong>Private key:</strong></p>
+    <textarea readonly rows="10" style="width:100%;">{{ privkey }}</textarea>
+    <p><a href="{{ url_for('download_key', which='priv') }}">Download private key (.asc)</a></p>
+    <p style="color:tomato"><small>Warning: private keys should be kept secret. Storing private keys on the server is insecure for production.</small></p>
+    {% endif %}
+
+    <form method="post">
+        <button name="action" value="generate" type="submit">Generate new PGP keypair</button>
+        <button name="action" value="delete" type="submit" onclick="return confirm('Delete your stored keys? This cannot be undone on the server.');">Delete stored keys</button>
+    </form>
+</div>
+{% endblock %}

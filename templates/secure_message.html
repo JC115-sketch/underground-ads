@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2>Secure Chat with {{ recipient.username }}</h2>
+
+    {% if error %}
+    <p style="color:tomato">{{ error }}</p>
+    {% endif %}
+
+    {% if not unlocked %}
+    <p>Your private key is stored encrypted on the server. Enter your passphrase to unlock it for {{ unlock_ttl }} seconds so we can decrypt messages in this session.</p>
+
+    <form method="post">
+        <label for="passphrase">Passphrase:</label><br>
+        <input type="password" name="passphrase" id="passphrase" required>
+        <button type="submit" name="action" value="unlock">Unlock (temporary)</button>
+    </form>
+    <hr>
+    {% else %}
+    <p style="color:green">PGP key unlocked for this session (short-lived).</p>
+    {% endif %}
+
+    <h3>Messages</h3>
+    <div class="messages">
+        {% if messages %}
+        {% for m in messages %}
+        <div class="msg">
+            <strong>{{ m.sender_name }}</strong>:
+            <div>{{ m.content }}</div>
+            <small>{{ m.created_at }}</small>
+        </div>
+        <hr>
+        {% endfor %}
+        {% else %}
+        <p>No messages.</p>
+        {% endif %}
+    </div>
+
+    <h3>Send a secure message</h3>
+    {% if not unlocked %}
+    <p><em>You must unlock your private key (enter passphrase) before sending encrypted messages.</em></p>
+    {% endif %}
+
+    <form method="post">
+        <textarea name="message" rows="4" style="width:100%;" {% if not unlocked %}disabled{% endif %}></textarea><br>
+        <button type="submit" name="action" value="send" {% if not unlocked %}disabled{% endif %}>Send Encrypted Message</button>
+    </form>
+
+    <p><small>Unlock duration: {{ unlock_ttl }} seconds.</small></p>
+</div>
+{% endblock %}

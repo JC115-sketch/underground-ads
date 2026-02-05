@@ -1,6 +1,8 @@
 import os
-from db import init_db, get_db
-from pgp_utils import decrypt_message, encrypt_message, generate_keypair
+import time
+from enc_utils import encrypt_bytes, decrypt_bytes
+from db import ensure_pgp_columns, init_db, get_db
+from pgp_utils import decrypt_message_with_priv, encrypt_message_with_pub, generate_ecc_keypair, parse_privkey, parse_pubkey
 from flask import Flask, redirect, render_template, request, url_for, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -8,6 +10,10 @@ from functools import wraps
 app = Flask(__name__)
 
 app.secret_key = "IGIVEUP" # this signs 'user_id' which is created at login
+
+_unlocked_keys = {}
+
+UNLOCK_TTL_SECONDS = 300 # 5 min session
 
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -423,44 +429,113 @@ def secure_message(recipient_id):
     conn = get_db()
     cur = conn.cursor()
 
-    # fetch usn and public key
+    # fetch recipient username and public key (armored)
     cur.execute("SELECT username, pgp_public_key FROM users WHERE id=?", (recipient_id,))
     recipient = cur.fetchone()
     if not recipient or not recipient["pgp_public_key"]:
         conn.close()
         return "Recipient not found or no PGP key available", 404
 
-    # fetch sender's private key
-    cur.execute("SELECT pgp_private_key FROM users WHERE id=?", (session["user_id"],))
-    user = cur.fetchone()
-    if not user or not user["pgp_private_key"]:
+    # fetch current user's encrypted private key pieces
+    cur.execute("SELECT pgp_private_key_encrypted, pgp_key_salt, pgp_key_nonce FROM users WHERE id=?", (session["user_id"],))
+    row = cur.fetchone()
+    if not row or not row["pgp_private_key_encrypted"]:
         conn.close()
-        return "You must generate your PGP key first", 400
+        return "You must generate and store your key first (go to settings)", 400
 
-    if request.method == "POST":
-        content = request.form.get("message")
-        encrypted_content = encrypt_message(recipient["pgp_public_key"], content)
+    user_id = session["user_id"]
 
-        cur.execute("""INSERT INTO messages (ad_id, sender_id, recipient_id, content, is_encrypted) VALUES (NULL, ?, ?, ?, 1)""", (session["user_id"], recipient_id, encrypted_content))
-        conn.commit()
+    # cleanup expired unlocked cache entry if present
+    now = time.time()
+    entry = _unlocked_keys.get(user_id)
+    if entry and entry.get("expires", 0) < now:
+        del _unlocked_keys[user_id]
+        entry = None
 
-    # retrieve encrypted message history
+    error = None
+    unlocked_privkey_obj = None
+
+    # If user submitted passphrase, try to decrypt and unlock for a short period
+    if request.method == "POST" and request.form.get("action") == "unlock":
+        passphrase = request.form.get("passphrase", "")
+        try:
+            privarm_bytes = decrypt_bytes(row['pgp_private_key_encrypted'], passphrase, row['pgp_key_salt'], row['pgp_key_nonce'])
+            privarm = privarm_bytes.decode("utf-8")
+            # parse to pgpy object (pgp_utils.parse_privkey must exist)
+            unlocked_privkey_obj = parse_privkey(privarm)
+
+            # store decrypted armored private key in the in-memory cache for a short time
+            _unlocked_keys[user_id] = {"privarm": privarm, "expires": now + UNLOCK_TTL_SECONDS}
+        except Exception:
+            error = "Wrong passphrase or decryption error"
+
+    # If user submitted a message to send - require unlocking (either just unlocked OR already unlocked)
+    if request.method == "POST" and request.form.get("action") == "send":
+        # ensure unlocked key is present (either from recent unlock or from above action)
+        entry = _unlocked_keys.get(user_id)
+        if not entry or entry.get("expires", 0) < now:
+            # not unlocked
+            conn.close()
+            return render_template("secure_message.html", recipient=recipient, messages=[], unlocked=False, error="Please unlock your PGP key first (enter passphrase).")
+
+        # create encryption using recipient public key - don't need the sender privkey to encrypt
+        content = request.form.get("message", "")
+        if not content:
+            # nothing to send
+            pass
+        else:
+            # encrypt with recipient public key
+            # make sure parse_pubkey handles armored string -> pgpy.PGPKey
+            pubkey = parse_pubkey(recipient["pgp_public_key"])
+            encrypted_content = encrypt_message(pubkey, content)
+
+            cur.execute("""INSERT INTO messages (ad_id, sender_id, recipient_id, content, is_encrypted) VALUES (NULL, ?, ?, ?, 1)""",
+                        (user_id, recipient_id, encrypted_content))
+            conn.commit()
+
+    # fetch encrypted messages between these two users (only encrypted ones for secure chat)
     cur.execute("""SELECT m.*, u.username AS sender_name
-    FROM messages m
-    JOIN users u ON m.sender_id = u.id
-    WHERE ((m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?))
-        AND m.is_encrypted = 1
-    ORDER BY m.created_at ASC""", (session["user_id"], recipient_id, recipient_id, session["user_id"]))
+                   FROM messages m
+                   JOIN users u ON m.sender_id = u.id
+                   WHERE ((m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?))
+                     AND m.is_encrypted = 1
+                   ORDER BY m.created_at ASC""",
+                (user_id, recipient_id, recipient_id, user_id))
     messages = cur.fetchall()
 
-    # decrypt for display
-    for m in messages:
+    # If unlocked, decrypt messages for display using the unlocked key from cache
+    entry = _unlocked_keys.get(user_id)
+    unlocked = False
+    if entry and entry.get("expires", 0) > now:
+        unlocked = True
         try:
-            m["content"] = decrypt_message(user["pgp_private_key"], m["content"])
+            privarm = entry["privarm"]
+            privkey = parse_privkey(privarm)
+            # decrypt each message
+            decrypted_messages = []
+            for m in messages:
+                try:
+                    # decrypt_message should accept a pgpy.PGPKey (privkey) or adapt accordingly
+                    plaintext = decrypt_message(privkey, m["content"])
+                    # create a shallow copy-like dict for display
+                    decrypted_messages.append({"sender_name": m["sender_name"], "content": plaintext, "created_at": m["created_at"]})
+                except Exception as e:
+                    decrypted_messages.append({"sender_name": m["sender_name"], "content": f"[Decryption error: {e}]",
+                                               "created_at": m["created_at"]})
+            messages = decrypted_messages
         except Exception as e:
-            m["content"] = f"[Decryption error: {e}]"
+            # parsing/decrypt failure => treat as locked
+            unlocked = False
+            error = "Error decrypting with unlocked key."
 
-    return render_template("messages.html", messages=messages, recipient=recipient, ad={"title": "Secure Chat"})
+    conn.close()
+
+    return render_template("secure_message.html",
+                           recipient=recipient,
+                           messages=messages,
+                           unlocked=unlocked,
+                           unlock_ttl=UNLOCK_TTL_SECONDS,
+                           error=error)
 
 @app.route("/contact_user/<int:user_id>", methods=["GET", "POST"])
 def contact_user(user_id):
@@ -565,7 +640,7 @@ def generate_pgp():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
-    key = generate_keypair()
+    key = generate_ecc_keypair()
     conn = get_db()
     cur = conn.cursor()
     cur.execute("UPDATE users SET pgp_public_key=?, pgp_private_key=? WHERE id=?", (str(key.pubkey), str(key), session["user_id"]))
@@ -573,6 +648,70 @@ def generate_pgp():
     conn.close()
 
     return "PGP key generated successfully"
+
+# supply passphrase for PGP
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        passphrase = request.form.get("passphrase")
+        passphrase_confirm = request.form.get("passphrase_confirm")
+        if not passphrase or passphrase != passphrase_confirm:
+            return render_template("settings.html", error="Passphrases must match and not be empty")
+
+        pubarm, privarm = generate_ecc_keypair(session.get("username", "User"), email=f"user{session['user_id']}@example.local")
+
+        ciphertext_b64, salt_b64, nonce_b64 = encrypt_bytes(privarm.encode("utf-8"), passphrase)
+
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE users SET pgp_public_key=?, pgp_private_key_encrypted=?, pgp_key_salt=?, pgp_key_nonce=?
+            WHERE id=?
+        """, (pubarm, ciphertext_b64, salt_b64, nonce_b64, session["user_id"]))
+        conn.commit()
+        conn.close()
+
+        return render_template("settings.html", success="PGP keys generated and stored (encrypted). Please download your private key.")
+    else:
+        # show settings page
+        return render_template("settings.html")
+
+@app.route("/download_public_key/<int:user_id>")
+def download_public_key(user_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT pgp_public_key FROM users WHERE id=?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    if not row or not row["pgp_public_key"]:
+        return "No public key available", 404
+    pub = row["pgp_public_key"]
+    # Return as downloadable file
+    return (pub, 200, {
+        'Content-Type': 'application/pgp-keys',
+        'Content-Disposition': f'attachment; filename="user_{user_id}_public.asc"'
+    })
+
+@app.route("/download_encrypted_private_key")
+def download_encrypted_private_key():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT pgp_private_key_encrypted, pgp_key_salt, pgp_key_nonce FROM users WHERE id=?", (session["user_id"],))
+    row = cur.fetchone()
+    conn.close()
+    if not row or not row["pgp_private_key_encrypted"]:
+        return "No private key stored", 404
+    # Provide a JSON-like or text file (they will need passphrase to decrypt locally)
+    content = f"ciphertext:{row['pgp_private_key_encrypted']}\nsalt:{row['pgp_key_salt']}\nnonce:{row['pgp_key_nonce']}\n"
+    return (content, 200, {
+        'Content-Type': 'text/plain',
+        'Content-Disposition': f'attachment; filename="user_{session["user_id"]}_privkey_encrypted.txt"'
+    })
 
 if __name__=="__main__":
     init_db()

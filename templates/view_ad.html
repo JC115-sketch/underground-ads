@@ -37,6 +37,7 @@
     <!-- Actions only for logged-in users -->
     {% if session.user_id %}
     <a href="{{ url_for('message', ad_id=ad.id) }}"><button>Inquire</button></a>
+    <a href="{{ url_for('secure_message', recipient_id=ad.user_id) }}"><button>Secure Chat</button></a>
     <a href="{{ url_for('rate_seller', seller_id=ad.user_id, ad_id=ad.id) }}"><button>Rate Seller</button></a>
     {% else %}
     <p><a href="{{ url_for('login') }}">Login</a> to inquire or rate this seller.</p>

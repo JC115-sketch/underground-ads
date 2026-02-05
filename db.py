@@ -9,6 +9,23 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def column_exists(cur, table, column):
+    cur.execute(f"PRAGMA table_info({table})") # retrieve info of a table's columns returns a set with one row for each column
+    cols = [row["name"] for row in cur.fetchall()]
+    return column in cols
+
+def ensure_pgp_columns(conn):
+    cur = conn.cursor()
+    if not column_exists(cur, "users", "pgp_public_key"):
+        cur.execute("ALTER TABLE users ADD COLUMN pgp_public_key TEXT")
+    if not column_exists(cur, "users", "pgp_private_key_encrypted"):
+        cur.execute("ALTER TABLE users ADD COLUMN pgp_private_key_encrypted TEXT")
+    if not column_exists(cur, "users", "pgp_key_salt"):
+        cur.execute("ALTER TABLE users ADD COLUMN pgp_key_salt TEXT")
+    if not column_exists(cur, "users", "pgp_key_nonce"):
+        cur.execute("ALTER TABLE users ADD COLUMN pgp_key_nonce TEXT")
+    conn.commit()
+
 def init_db():
     conn = get_db()
     cur = conn.cursor()
@@ -32,7 +49,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             pgp_public_key TEXT,
             pgp_private_key TEXT
         )
@@ -68,4 +85,5 @@ def init_db():
  
 
     conn.commit()
+    ensure_pgp_columns(conn)
     conn.close()
