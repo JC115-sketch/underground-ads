@@ -3,7 +3,7 @@ import time
 from enc_utils import encrypt_bytes, decrypt_bytes
 from db import ensure_pgp_columns, init_db, get_db
 from pgp_utils import decrypt_message_with_priv, encrypt_message_with_pub, generate_ecc_keypair, parse_privkey, parse_pubkey
-from flask import Flask, redirect, render_template, request, url_for, session
+from flask import Flask, redirect, render_template, request, url_for, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
@@ -695,23 +695,64 @@ def download_public_key(user_id):
         'Content-Disposition': f'attachment; filename="user_{user_id}_public.asc"'
     })
 
-@app.route("/download_encrypted_private_key")
-def download_encrypted_private_key():
+@app.route("/upload_pubkey", methods=["POST"])
+def upload_pubkey():
     if "user_id" not in session:
-        return redirect(url_for("login"))
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT pgp_private_key_encrypted, pgp_key_salt, pgp_key_nonce FROM users WHERE id=?", (session["user_id"],))
-    row = cur.fetchone()
+        return jsonify({"error": "login required"}), 401
+    pubkey = request.form.get("pubkey")
+    if not pubkey:
+        return jsonify({"error": "no pubkey"}), 400
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("UPDATE users SET pgp_public_key=? WHERE id=?", (pubkey, session["user_id"]))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/send_encrypted", methods=["POST"])
+def send_encrypted():
+    if "user_id" not in session:
+        return jsonify({"error":"login required"}), 401
+    recipient_id = request.form.get("recipient_id")
+    content = request.form.get("content")  # should be PGP-armored string
+    ad_id = request.form.get("ad_id") or None
+    if not recipient_id or not content:
+        return jsonify({"error":"missing fields"}), 400
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO messages (ad_id, sender_id, recipient_id, content, is_encrypted)
+        VALUES (?, ?, ?, ?, 1)
+    """, (ad_id, session["user_id"], recipient_id, content))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/fetch_messages", methods=["GET"])
+def fetch_messages():
+    if "user_id" not in session:
+        return jsonify({"error":"login required"}), 401
+    other = request.args.get("other_id")
+    if not other:
+        return jsonify({"error":"other_id required"}), 400
+    user_id = session["user_id"]
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("""
+       SELECT m.id, m.content, m.is_encrypted, m.sender_id, u.username AS sender_name, m.created_at
+       FROM messages m JOIN users u ON m.sender_id = u.id
+       WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)
+       ORDER BY m.created_at ASC
+    """, (user_id, other, other, user_id)) # order by created_at 
+    rows = cur.fetchall()
     conn.close()
-    if not row or not row["pgp_private_key_encrypted"]:
-        return "No private key stored", 404
-    # Provide a JSON-like or text file (they will need passphrase to decrypt locally)
-    content = f"ciphertext:{row['pgp_private_key_encrypted']}\nsalt:{row['pgp_key_salt']}\nnonce:{row['pgp_key_nonce']}\n"
-    return (content, 200, {
-        'Content-Type': 'text/plain',
-        'Content-Disposition': f'attachment; filename="user_{session["user_id"]}_privkey_encrypted.txt"'
-    })
+    # convert to JSON
+    out = []
+    for r in rows: # extracts data from db sets it into 'out' list
+        out.append({
+            "id": r["id"],
+            "content": r["content"],
+            "is_encrypted": r["is_encrypted"],
+            "sender_id": r["sender_id"],
+            "sender_name": r["sender_name"],
+            "created_at": r["created_at"]
+        })
+    return jsonify(out)
 
 if __name__=="__main__":
     init_db()
