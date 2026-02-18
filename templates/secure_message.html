@@ -1,51 +1,305 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="container">
-    <h2>Secure Chat with {{ recipient.username }}</h2>
+{# templates/secure_message.html #}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Secure Chat — {{ recipient.username }}</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            padding: 18px;
+        }
 
-    {% if error %}
-    <p style="color:tomato">{{ error }}</p>
-    {% endif %}
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
 
-    {% if not unlocked %}
-    <p>Your private key is stored encrypted on the server. Enter your passphrase to unlock it for {{ unlock_ttl }} seconds so we can decrypt messages in this session.</p>
+        .panel {
+            border: 1px solid #ddd;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
 
-    <form method="post">
-        <label for="passphrase">Passphrase:</label><br>
-        <input type="password" name="passphrase" id="passphrase" required>
-        <button type="submit" name="action" value="unlock">Unlock (temporary)</button>
-    </form>
-    <hr>
-    {% else %}
-    <p style="color:green">PGP key unlocked for this session (short-lived).</p>
-    {% endif %}
+        textarea {
+            width: 100%;
+            height: 120px;
+            font-family: inherit;
+        }
 
-    <h3>Messages</h3>
-    <div class="messages">
-        {% if messages %}
-        {% for m in messages %}
-        <div class="msg">
-            <strong>{{ m.sender_name }}</strong>:
-            <div>{{ m.content }}</div>
-            <small>{{ m.created_at }}</small>
+        input[type="text"], input[type="file"] {
+            width: 100%;
+        }
+
+        .msg {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+            .msg .meta {
+                color: #666;
+                font-size: 0.9rem;
+            }
+
+        .error {
+            color: #b00;
+        }
+
+        .ok {
+            color: #060;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 8px;
+        }
+
+        .btn-primary {
+            background: #0a84ff;
+            color: white;
+            border: none;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Secure chat with {{ recipient.username }}</h1>
+
+        <div class="panel">
+            <h3>Recipient public key</h3>
+            {% if recipient.pgp_public_key %}
+            <pre id="recipientPubKey" style="white-space: pre-wrap;">{{ recipient.pgp_public_key }}</pre>
+            {% else %}
+            <p class="error">Recipient has not uploaded a public key yet.</p>
+            {% endif %}
         </div>
-        <hr>
-        {% endfor %}
-        {% else %}
-        <p>No messages.</p>
-        {% endif %}
+
+        <div class="panel" id="key-tools">
+            <h3>Your local key management (private key stays on your device)</h3>
+
+            <p>
+                <button id="btn-generate" class="btn btn-primary">Generate Keypair</button>
+                <label style="margin-left:10px"><input type="checkbox" id="save-locally"> Save private key in browser (localStorage)</label>
+            </p>
+
+            <p>
+                <button id="btn-download-private" class="btn btn-ghost">Download private key (if present)</button>
+                <button id="btn-clear-local" class="btn btn-ghost">Remove private key from browser</button>
+            </p>
+
+            <p>Or paste an existing private key (armored):</p>
+            <textarea id="paste-private" placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----..."></textarea>
+            <p><button id="btn-store-pasted" class="btn btn-primary">Store pasted private key (locally)</button></p>
+
+            <hr />
+
+            <p>Upload your public key to the server (so others can fetch it):</p>
+            <button id="btn-upload-public" class="btn btn-primary">Upload public key to server</button>
+            <span id="upload-status"></span>
+        </div>
+
+        <div class="panel">
+            <h3>Compose encrypted message (to {{ recipient.username }})</h3>
+            <textarea id="plaintext" placeholder="Type your message here..."></textarea>
+            <p>
+                <button id="btn-encrypt-send" class="btn btn-primary">Encrypt & Send</button>
+                <span id="send-status"></span>
+            </p>
+        </div>
+
+        <div class="panel">
+            <h3>Messages (encrypted on server; decrypted in your browser)</h3>
+            <div id="messages">
+                {% for m in messages %}
+                <div class="msg" data-msgid="{{ m.id }}" data-content="{{ m.content|e }}">
+                    <div class="meta"><strong>{{ m.sender_name }}</strong> — <small>{{ m.created_at }}</small></div>
+                    <div class="body">[encrypted message]</div>
+                </div>
+                {% endfor %}
+            </div>
+            <p><button id="btn-refresh" class="btn btn-ghost">Refresh and attempt decrypt</button></p>
+            <div id="decrypt-errors" style="margin-top:8px; color:#a00"></div>
+        </div>
+
     </div>
 
-    <h3>Send a secure message</h3>
-    {% if not unlocked %}
-    <p><em>You must unlock your private key (enter passphrase) before sending encrypted messages.</em></p>
-    {% endif %}
+    <!-- openpgp.js v5 -->
+    <script src="https://unpkg.com/openpgp@5/dist/openpgp.min.js"></script>
+    <!-- our client library -->
+    <script src="{{ url_for('static', filename='js/pgp-client.js') }}"></script>
 
-    <form method="post">
-        <textarea name="message" rows="4" style="width:100%;" {% if not unlocked %}disabled{% endif %}></textarea><br>
-        <button type="submit" name="action" value="send" {% if not unlocked %}disabled{% endif %}>Send Encrypted Message</button>
-    </form>
+    <script>
+    (function () {
+      const recipientPub = document.getElementById("recipientPubKey") ? document.getElementById("recipientPubKey").innerText.trim() : null;
+      const recipientId = {{ recipient.get("id")|default(0) }};
+      const messagesContainer = document.getElementById("messages");
+      const saveLocallyCheckbox = document.getElementById("save-locally");
+      const statusUpload = document.getElementById("upload-status");
+      const statusSend = document.getElementById("send-status");
+      const decryptErrors = document.getElementById("decrypt-errors");
 
-    <p><small>Unlock duration: {{ unlock_ttl }} seconds.</small></p>
-</div>
-{% endblock %}
+      // helper: current private armored in localStorage (if any)
+      function getLocalPriv() {
+        return PGP_CLIENT.getPrivateKeyFromLocalStorage();
+      }
+
+      // Wire buttons
+      document.getElementById("btn-generate").addEventListener("click", async () => {
+        try {
+          const username = "{{ session.get('username')|default('User') }}";
+          const email = username + "@example.local";
+          document.getElementById("btn-generate").innerText = "Generating…";
+          const { privateArmored, publicArmored } = await PGP_CLIENT.generateKeypair(username, email);
+          // store private in memory (optionally to localStorage)
+          if (saveLocallyCheckbox.checked) {
+            PGP_CLIENT.savePrivateKeyToLocalStorage(privateArmored);
+            alert("Private key saved to localStorage (not secure against XSS).");
+          } else {
+            // offer download
+            PGP_CLIENT.downloadPrivateKey(privateArmored, username + "_private.asc");
+            alert("Private key downloaded. You may optionally save to localStorage.");
+          }
+          // show public key (replace UI)
+          if (document.getElementById("recipientPubKey")) {
+            // nothing — recipient area is separate; but we also show your public key as a temp field
+          }
+          // put public in paste area for quick upload (re-using paste-private textarea)
+          document.getElementById("paste-private").value = ""; // clear
+          // Save the generated public key temporarily into the "paste-private" area for user convenience
+          // We will use upload-public button to send it
+          window._lastGeneratedPublicKey = publicArmored;
+          statusUpload.innerText = "Keypair generated. Click Upload public key to send your public key to server.";
+        } catch (e) {
+          console.error(e);
+          alert("Error generating key: " + e);
+        } finally {
+          document.getElementById("btn-generate").innerText = "Generate Keypair";
+        }
+      });
+
+      document.getElementById("btn-download-private").addEventListener("click", () => {
+        const priv = getLocalPriv();
+        if (!priv) return alert("No private key stored in this browser's localStorage.");
+        PGP_CLIENT.downloadPrivateKey(priv, "{{ session.get('username', 'user') }}_private.asc");
+      });
+
+      document.getElementById("btn-clear-local").addEventListener("click", () => {
+        PGP_CLIENT.removePrivateKeyFromLocalStorage();
+        alert("Removed private key from localStorage (if present).");
+      });
+
+      document.getElementById("btn-store-pasted").addEventListener("click", () => {
+        const txt = document.getElementById("paste-private").value.trim();
+        if (!txt) return alert("Paste your armored private key first.");
+        PGP_CLIENT.savePrivateKeyToLocalStorage(txt);
+        alert("Private key stored locally in this browser (localStorage).");
+      });
+
+      document.getElementById("btn-upload-public").addEventListener("click", async () => {
+        try {
+          // prefer recently generated public key in window._lastGeneratedPublicKey; else attempt to look for pasted public
+          const candidate = window._lastGeneratedPublicKey || document.getElementById("paste-private").value.trim();
+          if (!candidate) {
+            alert("No public key found. Generate a keypair first or paste your public key in the paste box.");
+            return;
+          }
+          statusUpload.innerText = "Uploading...";
+          const res = await PGP_CLIENT.uploadPublicKey(candidate);
+          statusUpload.innerText = "Uploaded.";
+        } catch (e) {
+          console.error(e);
+          statusUpload.innerText = "Upload failed: " + e;
+        }
+      });
+
+      // Encrypt & send
+      document.getElementById("btn-encrypt-send").addEventListener("click", async () => {
+        statusSend.innerText = "";
+        if (!recipientPub) {
+          return alert("Recipient has no public key available.");
+        }
+        const plain = document.getElementById("plaintext").value;
+        if (!plain) {
+          return alert("Type a message first.");
+        }
+        try {
+          document.getElementById("btn-encrypt-send").innerText = "Encrypting…";
+          const armored = await PGP_CLIENT.encryptForPublicKey(plain, recipientPub);
+          // send to server
+          await PGP_CLIENT.sendEncryptedMessage(recipientId, armored, null);
+          statusSend.innerText = "Encrypted message sent.";
+          // clear textarea
+          document.getElementById("plaintext").value = "";
+          await refreshAndDecrypt();
+        } catch (e) {
+          console.error(e);
+          statusSend.innerText = "Send failed: " + e;
+        } finally {
+          document.getElementById("btn-encrypt-send").innerText = "Encrypt & Send";
+        }
+      });
+
+      // Refresh and attempt decrypt of messages currently in page
+      async function refreshAndDecrypt() {
+        decryptErrors.innerText = "";
+        try {
+          // fetch latest messages from server endpoint (safer than relying only on HTML)
+          const otherId = recipientId;
+          const rows = await PGP_CLIENT.fetchMessagesWith(otherId);
+
+          // Attempt to decrypt with local private key (if present)
+          const priv = getLocalPriv();
+          const decrypted = await PGP_CLIENT.decryptMessagesArray(rows, priv);
+
+          // Render container
+          messagesContainer.innerHTML = "";
+          const errs = [];
+          for (const m of decrypted) {
+            const div = document.createElement("div");
+            div.className = "msg";
+            div.dataset.msgid = m.id;
+            const meta = document.createElement("div");
+            meta.className = "meta";
+            meta.innerHTML = `<strong>${m.sender_name}</strong> — <small>${m.created_at}</small>`;
+            const body = document.createElement("div");
+            body.className = "body";
+            if (m.error) {
+              body.innerHTML = `<em class="error">[decryption error] ${m.error}</em>`;
+              errs.push("Message " + m.id + ": " + m.error);
+            } else {
+              body.textContent = m.decrypted;
+            }
+            div.appendChild(meta);
+            div.appendChild(body);
+            messagesContainer.appendChild(div);
+          }
+          decryptErrors.innerText = errs.join("\n");
+        } catch (e) {
+          console.error(e);
+          decryptErrors.innerText = "Failed to refresh messages: " + e;
+        }
+      }
+
+      // wire refresh button
+      document.getElementById("btn-refresh").addEventListener("click", refreshAndDecrypt);
+
+      // initial decrypt attempt for messages rendered by server
+      (async () => {
+        // server rendered messages exist as DOM nodes; we also call fetch to get latest data
+        await sleep(100); // let things render
+        await refreshAndDecrypt();
+      })();
+
+    })();
+    </script>
+</body>
+</html>
