@@ -30,7 +30,7 @@
 
         {# Settings only makes sense for the current user's own profile; if profile page always shows the signed-in user, this is fine #}
         {% if session.user_id %}
-        <a href="{{ url_for('settings') }}"><button class="btn-settings">Settings</button></a>
+        <a href="{{ url_for('edit_profile') }}"><button class="btn-settings">Settings</button></a>
         {% endif %}
     </div>
 </div>

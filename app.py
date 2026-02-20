@@ -495,7 +495,7 @@ def secure_message(recipient_id):
     msgs = cur.fetchall()
     conn.close()
 
-    # Pass encrypted messages and recipient public key to template — client handles decryption and encryption
+    # Pass encrypted messages and recipient public key to template ï¿½ client handles decryption and encryption
     return render_template("secure_message.html", recipient=recipient, messages=msgs)
 
 

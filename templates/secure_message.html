@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Secure Chat — {{ recipient.username }}</title>
+    <title>Secure Chat {{ recipient.username }}</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
         body {
@@ -121,7 +121,7 @@
             <div id="messages">
                 {% for m in messages %}
                 <div class="msg" data-msgid="{{ m.id }}" data-content="{{ m.content|e }}">
-                    <div class="meta"><strong>{{ m.sender_name }}</strong> — <small>{{ m.created_at }}</small></div>
+                    <div class="meta"><strong>{{ m.sender_name }}</strong> ï¿½ <small>{{ m.created_at }}</small></div>
                     <div class="body">[encrypted message]</div>
                 </div>
                 {% endfor %}
@@ -140,7 +140,7 @@
     <script>
     (function () {
       const recipientPub = document.getElementById("recipientPubKey") ? document.getElementById("recipientPubKey").innerText.trim() : null;
-      const recipientId = {{ recipient.get("id")|default(0) }};
+      const recipientId = {{ recipient['id'] if recipient else 0 }};
       const messagesContainer = document.getElementById("messages");
       const saveLocallyCheckbox = document.getElementById("save-locally");
       const statusUpload = document.getElementById("upload-status");
@@ -157,7 +157,7 @@
         try {
           const username = "{{ session.get('username')|default('User') }}";
           const email = username + "@example.local";
-          document.getElementById("btn-generate").innerText = "Generating…";
+          document.getElementById("btn-generate").innerText = "Generatingï¿½";
           const { privateArmored, publicArmored } = await PGP_CLIENT.generateKeypair(username, email);
           // store private in memory (optionally to localStorage)
           if (saveLocallyCheckbox.checked) {
@@ -170,7 +170,7 @@
           }
           // show public key (replace UI)
           if (document.getElementById("recipientPubKey")) {
-            // nothing — recipient area is separate; but we also show your public key as a temp field
+            // nothing ï¿½ recipient area is separate; but we also show your public key as a temp field
           }
           // put public in paste area for quick upload (re-using paste-private textarea)
           document.getElementById("paste-private").value = ""; // clear
@@ -232,7 +232,7 @@
           return alert("Type a message first.");
         }
         try {
-          document.getElementById("btn-encrypt-send").innerText = "Encrypting…";
+          document.getElementById("btn-encrypt-send").innerText = "Encryptingï¿½";
           const armored = await PGP_CLIENT.encryptForPublicKey(plain, recipientPub);
           // send to server
           await PGP_CLIENT.sendEncryptedMessage(recipientId, armored, null);
@@ -269,7 +269,7 @@
             div.dataset.msgid = m.id;
             const meta = document.createElement("div");
             meta.className = "meta";
-            meta.innerHTML = `<strong>${m.sender_name}</strong> — <small>${m.created_at}</small>`;
+            meta.innerHTML = `<strong>${m.sender_name}</strong> ï¿½ <small>${m.created_at}</small>`;
             const body = document.createElement("div");
             body.className = "body";
             if (m.error) {
