@@ -96,6 +96,17 @@
                 <button id="btn-clear-local" class="btn btn-ghost">Remove private key from browser</button>
             </p>
 
+        <div class="pgp-section">
+          <h3>Upload Your Public Key</h3>
+          <p>Paste your <strong>public key</strong> below and click Upload. This will store it on the server so others can send you encrypted messages.</p>
+
+          <textarea id="pubkeyInput" placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----" rows="8" style="width:100%;"></textarea>
+
+          <button id="uploadPubBtn" class="btn btn-primary" type="button">
+            Upload Public Key to Server
+          </button>
+        </div>
+
             <p>Or paste an existing private key (armored):</p>
             <textarea id="paste-private" placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----..."></textarea>
             <p><button id="btn-store-pasted" class="btn btn-primary">Store pasted private key (locally)</button></p>
