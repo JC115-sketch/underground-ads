@@ -470,7 +470,7 @@ def secure_message(recipient_id):
     Server no longer decrypts messages. This route:
       - ensures recipient exists and has a public key
       - returns the encrypted messages (is_encrypted=1) between the users so the client can decrypt locally
-      - supplies recipient public key to the client so they can encrypt a new message
+      - supplies recipient public key to the client, so they can encrypt a new message
     """
     conn = get_db()
     cur = conn.cursor()
@@ -495,8 +495,13 @@ def secure_message(recipient_id):
     msgs = cur.fetchall()
     conn.close()
 
-    # Pass encrypted messages and recipient public key to template � client handles decryption and encryption
-    return render_template("secure_message.html", recipient=recipient, messages=msgs)
+    # making sure template gets recipient id
+    recipient_username = recipient["username"]
+    recipient_pubkey = recipient["pgp_public_key"]
+
+    # Pass encrypted messages and recipient public key to template - client handles decryption and encryption
+    return render_template("secure_message.html", recipient_id=recipient_id, recipient_username=recipient_username,
+                           recipient_pubkey=recipient_pubkey, messages=msgs)
 
 
 @app.route("/download_public_key/<int:user_id>")
