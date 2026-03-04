@@ -151,7 +151,7 @@
     <script>
     (function () {
       const recipientPub = document.getElementById("recipientPubKey") ? document.getElementById("recipientPubKey").innerText.trim() : null;
-      const recipientId = {{ recipient['id'] if recipient else 0 }};
+      const recipientId = {{ (recipient.id if recipient else None) | tojson }};
       const messagesContainer = document.getElementById("messages");
       const saveLocallyCheckbox = document.getElementById("save-locally");
       const statusUpload = document.getElementById("upload-status");
