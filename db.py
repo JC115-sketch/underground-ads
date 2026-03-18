@@ -6,8 +6,9 @@ DB_FILENAME = "uadb.db"
 
 def get_db():
     db_path = os.path.join(os.path.dirname(__file__), DB_FILENAME)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
 def column_exists(cur, table, column):
