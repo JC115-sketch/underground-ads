@@ -538,9 +538,10 @@ def upload_pubkey():
 @app.route("/send_encrypted", methods=["POST"])
 @login_required
 def send_encrypted():
-    recipient_id = request.form.get("recipient_id") or (request.json and request.json.get("recipient_id"))
-    content = request.form.get("content") or (request.json and request.json.get("content"))
-    ad_id = request.form.get("ad_id") or (request.json and request.json.get("ad_id")) or None
+    data = request.get_json(silent=True) # return None if not json
+    recipient_id = request.form.get("recipient_id") or (data and data.get("recipient_id"))
+    content = request.form.get("content") or (data and data.get("content"))
+    ad_id = request.form.get("ad_id") or (data and data.get("ad_id")) or None
 
     if not recipient_id or not content:
         return jsonify({"error": "missing fields"}), 400
