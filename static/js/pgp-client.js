@@ -131,25 +131,64 @@ const PGP_CLIENT = (function () {
   }
 
   // Convenience: try to decrypt many messages; returns array of objects with decrypted text (or error)
-  async function decryptMessagesArray(msgRows, privArmored) {
-    const out = [];
-    for (const r of msgRows) {
-      if (r.is_encrypted && privArmored) {
-        try {
-          const plain = await decryptWithPrivateArmored(r.content, privArmored);
-          out.push({ ...r, decrypted: plain, error: null });
-        } catch (e) {
-          out.push({ ...r, decrypted: null, error: String(e) });
-        }
-      } else if (r.is_encrypted) {
-        out.push({ ...r, decrypted: null, error: "No private key available" });
-      } else {
-        // not encrypted
-        out.push({ ...r, decrypted: r.content, error: null });
+async function decryptMessagesArray(msgRows, privArmored) {
+  const out = [];
+
+  for (const r of msgRows) {
+
+    // CASE 1: encrypted message
+    if (r.is_encrypted) {
+
+      // If I sent it → cannot decrypt
+      if (r.sender_id === CURRENT_USER_ID) {
+        out.push({
+          ...r,
+          decrypted: "[Encrypted message sent]",
+          error: null
+        });
+        continue;
       }
+
+      // If no private key
+      if (!privArmored) {
+        out.push({
+          ...r,
+          decrypted: null,
+          error: "No private key available"
+        });
+        continue;
+      }
+
+      // If malformed PGP message
+      if (!r.content.includes("BEGIN PGP MESSAGE")) {
+        out.push({
+          ...r,
+          decrypted: null,
+          error: "Malformed encrypted message"
+        });
+        continue;
+      }
+
+      // Attempt decrypt
+      try {
+        const plain = await decryptWithPrivateArmored(r.content, privArmored);
+        out.push({ ...r, decrypted: plain, error: null });
+      } catch (e) {
+        out.push({ ...r, decrypted: null, error: String(e) });
+      }
+
+    } else {
+      // CASE 2: not encrypted
+      out.push({
+        ...r,
+        decrypted: r.content,
+        error: null
+      });
     }
-    return out;
   }
+
+  return out;
+}
 
   // Wire the upload public key UI (expects pubkeyInput & uploadPubBtn in HTML)
   document.addEventListener("DOMContentLoaded", function () {
