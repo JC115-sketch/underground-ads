@@ -347,7 +347,7 @@ def my_chats():
         LEFT JOIN ads a ON m.ad_id = a.id
         LEFT JOIN users u ON u.id = CASE WHEN m.sender_id = ? THEN m.recipient_id ELSE m.sender_id END
         WHERE ? IN (m.sender_id, m.recipient_id)
-        ORDER BY a.id DESC
+        ORDER BY m.created_at DESC
         """,
         (session["user_id"], session["user_id"], session["user_id"]),
     )
@@ -389,8 +389,7 @@ def message(ad_id=None):
         if recipient_id is None:
             conn.close()
             return "Error: recipient not found", 400
-        if ad_id is None:
-            ad_id = 0
+        # don't need to check ad_id
         cur.execute("INSERT INTO messages (ad_id, sender_id, recipient_id, content) VALUES (?, ?, ?, ?)",
                     (ad_id, session["user_id"], recipient_id, content))
         conn.commit()
