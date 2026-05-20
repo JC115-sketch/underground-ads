@@ -43,9 +43,7 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-
-# -------------------------
-# Home / Search / Pagination
+# Home 
 # -------------------------
 @app.route("/")
 def home():
@@ -94,8 +92,8 @@ def home():
     return render_template("index.html", ads=ads, query=query, page=page, total_pages=total_pages)
 
 
-# -------------------------
-# Profile / Account
+
+# Profile 
 # -------------------------
 @app.route("/profile")
 @login_required
@@ -132,7 +130,7 @@ def edit_profile():
     return render_template("edit_profile.html", about=user["about"] if user and "about" in user.keys() else "")
 
 
-# -------------------------
+
 # Admin dashboard and actions
 # -------------------------
 @app.route("/admin")
@@ -182,9 +180,7 @@ def delete_user_about(user_id):
     conn.close()
     return redirect(url_for("admin_dashboard"))
 
-
-# -------------------------
-# Ads CRUD
+# Ads MAIN
 # -------------------------
 @app.route("/create_ad", methods=["GET", "POST"])
 @login_required
@@ -276,7 +272,6 @@ def delete_ad_m(ad_id):
     return redirect(url_for("admin_dashboard"))
 
 
-# -------------------------
 # Registration / Login / Logout
 # -------------------------
 @app.route("/create_account", methods=["GET", "POST"])
@@ -326,15 +321,13 @@ def logout():
     return redirect(url_for("home"))
 
 
-# -------------------------
-# Static informational pages
+# Static informational 
 # -------------------------
 @app.route("/about")
 def about():
     return render_template("about.html")
 
 
-# -------------------------
 # Chats & Messages
 # -------------------------
 @app.route("/my_chats")
@@ -460,8 +453,7 @@ def contact_user(user_id):
     return render_template("messages.html", ad=None, messages=messages, recipient=recipient)
 
 
-# -------------------------
-# Secure messaging (client-side encryption/decryption)
+# Secure messaging (in browser)
 # -------------------------
 @app.route("/secure_message/<int:recipient_id>", methods=["GET", "POST"])
 @login_required
@@ -481,7 +473,7 @@ def secure_message(recipient_id):
         conn.close()
         return "Recipient not found", 404
 
-    # get encrypted messages between the two users (is_encrypted flagged)
+    # (is_encrypted flagged)
     cur.execute(
         """
         SELECT m.id, m.content, m.is_encrypted, m.sender_id, u.username AS sender_name, m.created_at
@@ -523,7 +515,7 @@ def download_public_key(user_id):
 @app.route("/upload_pubkey", methods=["POST"])
 @login_required
 def upload_pubkey():
-    # accepts 'pubkey' form field (armored)
+    # accepts 'pubkey' form 
     pubkey = request.form.get("pubkey") or (request.json and request.json.get("pubkey"))
     if not pubkey:
         return jsonify({"error": "no pubkey"}), 400
@@ -593,7 +585,6 @@ def fetch_messages():
     return jsonify(out)
 
 
-# -------------------------
 # Ad view and user profile view
 # -------------------------
 @app.route("/ad/<int:ad_id>")
@@ -667,7 +658,6 @@ def view_user(user_id):
     return render_template("user_profile.html", user=user, reviews=reviews)
 
 
-# -------------------------
 # Rating a seller
 # -------------------------
 @app.route("/rate/<int:seller_id>", methods=["GET", "POST"])
@@ -697,10 +687,11 @@ def rate_seller(seller_id):
     conn.close()
     return render_template("rate.html", seller_id=seller_id, seller=seller)
 
+# Ensure db created
+init_db()
 
-# -------------------------
 # Start app
 # -------------------------
 if __name__ == "__main__":
-    init_db()
+
     app.run(debug=True)
